@@ -87,6 +87,8 @@ class GameState {
         this.currentLevel = 0;
         this.shotsUsed = 0;
         this.maxShots = 3;
+        this.superSaiyajin = false;
+        this.dragonBallCollected = false;
     }
 
     addScore(points) {
@@ -97,6 +99,7 @@ class GameState {
     nextLevel() {
         this.currentLevel++;
         this.shotsUsed = 0;
+        this.dragonBallCollected = false; // Reset dragon ball for new level
         document.getElementById('levelDisplay').textContent = this.currentLevel + 1;
     }
 
@@ -104,6 +107,8 @@ class GameState {
         this.score = 0;
         this.currentLevel = 0;
         this.shotsUsed = 0;
+        this.superSaiyajin = false;
+        this.dragonBallCollected = false;
         document.getElementById('scoreDisplay').textContent = this.score;
         document.getElementById('levelDisplay').textContent = this.currentLevel + 1;
     }
@@ -111,12 +116,14 @@ class GameState {
 
 let canvas, ctx, gameState, soundManager, particleSystem;
 let goku = {};
-let levels, enemies;
+let levels, enemies, dragonBall;
 let dragging = false;
 let dragStartX, dragStartY;
 let animationId;
 
-const gravity = 0.35;
+// Physics constants
+const normalGravity = 0.3;  // More realistic gravity (50% of super saiyajin)
+const superGravity = 0.15;  // Super Saiyajin gravity (saved from previous)
 const friction = 0.995;
 const bounceReduction = 0.6;
 
@@ -216,6 +223,16 @@ function initGame() {
             hit: false,
             hitAnimation: 0
         }));
+
+        // Initialize Dragon Ball for each level
+        dragonBall = {
+            x: Math.random() * (canvas.width - 200) + 100,
+            y: Math.random() * (canvas.height - 200) + 100,
+            collected: false,
+            rotation: 0,
+            pulse: 0
+        };
+
         resetGoku();
         gameState.shotsUsed = 0;
     }
@@ -283,18 +300,25 @@ function initGame() {
     function onDragEnd(e) {
         e.preventDefault();
         if (dragging && !goku.launched) {
-            // Calcular direção e força do lançamento
             const deltaX = dragStartX - goku.x;
             const deltaY = dragStartY - goku.y;
-            const launchDistance = Math.hypot(deltaX, deltaY);
-            const maxLaunchDistance = 150;
+            const distance = Math.hypot(deltaX, deltaY);
 
-            // Normalizar e aplicar força baseada na distância
-            const power = Math.min(launchDistance / maxLaunchDistance, 1) * 15; // Força máxima de 15
+            if (distance > 5) {
+                // Força muito maior para responsividade
+                // Use current physics for prediction
+                let maxForce, forceMultiplier;
+                if (gameState.superSaiyajin) {
+                    maxForce = 3;
+                    forceMultiplier = 40;
+                } else {
+                    maxForce = 2;
+                    forceMultiplier = 20;
+                }
 
-            if (launchDistance > 0) {
-                goku.vx = (deltaX / launchDistance) * power * 1.5;
-                goku.vy = (deltaY / launchDistance) * power * 1.5;
+                const force = Math.min(distance / 50, maxForce) * forceMultiplier;
+                goku.vx = (deltaX / distance) * force;
+                goku.vy = (deltaY / distance) * force;
             }
 
             goku.launched = true;
@@ -452,6 +476,47 @@ function initGame() {
         }
     }
 
+    function drawDragonBall() {
+        if (dragonBall.collected) return;
+
+        // Update animation
+        dragonBall.rotation += 0.02;
+        dragonBall.pulse += 0.1;
+
+        ctx.save();
+        ctx.translate(dragonBall.x, dragonBall.y);
+        ctx.rotate(dragonBall.rotation);
+
+        // Glow effect
+        const glowSize = 35 + Math.sin(dragonBall.pulse) * 5;
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#ff8c00';
+        ctx.beginPath();
+        ctx.arc(0, 0, glowSize, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Dragon Ball body
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ff8c00';
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4 stars
+        ctx.fillStyle = '#ff0000';
+        for (let i = 0; i < 4; i++) {
+            const angle = (i * Math.PI / 2) + dragonBall.rotation;
+            const starX = Math.cos(angle) * 8;
+            const starY = Math.sin(angle) * 8;
+
+            ctx.beginPath();
+            ctx.arc(starX, starY, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
     function drawAimLine() {
         if (dragging && !goku.launched) {
             const distance = Math.hypot(goku.x - dragStartX, goku.y - dragStartY);
@@ -469,23 +534,22 @@ function initGame() {
             let predX = dragStartX;
             let predY = dragStartY;
 
-            // Usar a mesma lógica do lançamento real
             const deltaX = dragStartX - goku.x;
             const deltaY = dragStartY - goku.y;
-            const trajDistance = Math.hypot(deltaX, deltaY);
-            const maxTrajDistance = 150;
-            const trajPower = Math.min(trajDistance / maxTrajDistance, 1) * 15;
 
             let predVx = 0;
             let predVy = 0;
 
-            if (trajDistance > 0) {
-                predVx = (deltaX / trajDistance) * trajPower * 1.5;
-                predVy = (deltaY / trajDistance) * trajPower * 1.5;
+            if (distance > 5) {
+                const force = Math.min(distance / 100, 2) * 20;
+                predVx = (deltaX / distance) * force;
+                predVy = (deltaY / distance) * force;
             }
 
             for (let i = 0; i < 50; i++) {
-                predVy += gravity;
+                const currentGravity = gameState.superSaiyajin ? superGravity : normalGravity;
+                const gravityMultiplier = gameState.superSaiyajin ? 0.4 : 0.8;
+                predVy += currentGravity * gravityMultiplier;
                 predX += predVx;
                 predY += predVy;
 
@@ -522,11 +586,10 @@ function initGame() {
             }
 
             // Physics
-            goku.vy += gravity * 0.8;
+            const currentGravity = gameState.superSaiyajin ? superGravity : normalGravity;
+            goku.vy += currentGravity;
             goku.x += goku.vx;
             goku.y += goku.vy;
-            goku.vx *= 0.995;
-            goku.vy *= 0.998;
 
             // Ground collision
             if (goku.y + goku.radius > canvas.height - 40) {
@@ -548,7 +611,8 @@ function initGame() {
             }
 
             // Reset if stopped or out of bounds
-            if ((Math.abs(goku.vx) < 0.5 && Math.abs(goku.vy) < 0.5 && goku.y > canvas.height - 100) ||
+            const stopThreshold = gameState.superSaiyajin ? 0.5 : 1.0; // Normal mode stops easier
+            if ((Math.abs(goku.vx) < stopThreshold && Math.abs(goku.vy) < stopThreshold && goku.y > canvas.height - 100) ||
                 goku.y > canvas.height + 100) {
                 resetGoku();
             }
@@ -556,6 +620,7 @@ function initGame() {
 
         // Draw game objects
         drawGoku();
+        drawDragonBall();
 
         // Update and draw enemies
         enemies.forEach((enemy) => {
@@ -584,6 +649,25 @@ function initGame() {
                 }
             }
         });
+
+        // Dragon Ball collision
+        if (!dragonBall.collected && goku.launched) {
+            const dist = Math.hypot(goku.x - dragonBall.x, goku.y - dragonBall.y);
+            if (dist < goku.radius + 25) {
+                dragonBall.collected = true;
+                gameState.dragonBallCollected = true;
+                gameState.superSaiyajin = true;
+                gameState.addScore(500); // Bonus points
+
+                // Super Saiyajin transformation effect
+                for (let i = 0; i < 30; i++) {
+                    particleSystem.addExplosion(dragonBall.x, dragonBall.y, '#f8c927');
+                }
+
+                // Show transformation message (could add UI element here)
+                console.log('SUPER SAIYAJIN ACTIVATED!');
+            }
+        }
 
         // Update particles
         particleSystem.update(ctx);
