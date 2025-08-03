@@ -1,0 +1,43 @@
+body {
+    margin: 0;
+    font-family: 'Arial', sans-serif;
+    background: radial-gradient(circle at center, #111 30%, #000);
+    color: white;
+    overflow: hidden;
+}
+
+#startScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    text-align: center;
+}
+
+#startScreen h1 {
+    font-size: 3em;
+    color: #f8c927;
+    text-shadow: 2px 2px 5px #ff0000;
+}
+
+#startScreen button {
+    font-size: 1.5em;
+    padding: 15px 30px;
+    margin-top: 20px;
+    background-color: #f83600;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+#startScreen button:hover {
+    background-color: #d52d00;
+}
+
+canvas {
+    display: block;
+    background: #87CEEB;
+}
