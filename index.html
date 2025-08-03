@@ -5,19 +5,60 @@
     <title>Kamehameha Sling</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="startScreen">
-    <h1>Kamehameha Sling</h1>
-    <button onclick="startGame()">Jogar</button>
+    <div class="title-container">
+        <h1>KAMEHAMEHA</h1>
+        <h2>SLING</h2>
+    </div>
+    <div class="game-info">
+        <p>Arraste Goku para mirar e solte para lançar!</p>
+        <p>Derrote todos os inimigos para avançar de nível</p>
+    </div>
+    <button onclick="startGame()" class="play-button">
+        <span>JOGAR</span>
+    </button>
 </div>
-<canvas id="gameCanvas" style="display:none;"></canvas>
-<script src="game.js"></script>
-</body>
-</html>
-</title>
-</head>
-<body>
 
+<div id="gameUI" style="display:none;">
+    <div class="hud">
+        <div class="level-info">
+            <span>Nível: <span id="levelDisplay">1</span></span>
+        </div>
+        <div class="score-info">
+            <span>Pontos: <span id="scoreDisplay">0</span></span>
+        </div>
+        <div class="power-meter">
+            <span>Poder:</span>
+            <div class="power-bar">
+                <div id="powerFill" class="power-fill"></div>
+            </div>
+        </div>
+    </div>
+    <button id="resetButton" onclick="resetLevel()">Reiniciar Nível</button>
+</div>
+
+<canvas id="gameCanvas" style="display:none;"></canvas>
+
+<div id="levelComplete" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>Nível Completo!</h2>
+        <p>Pontuação: <span id="levelScore">0</span></p>
+        <button onclick="nextLevel()">Próximo Nível</button>
+    </div>
+</div>
+
+<div id="gameComplete" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>Parabéns!</h2>
+        <p>Você completou todos os níveis!</p>
+        <p>Pontuação Final: <span id="finalScore">0</span></p>
+        <button onclick="restartGame()">Jogar Novamente</button>
+    </div>
+</div>
+
+<script src="game.js"></script>
 </body>
 </html>
