@@ -283,9 +283,20 @@ function initGame() {
     function onDragEnd(e) {
         e.preventDefault();
         if (dragging && !goku.launched) {
-            const power = 0.3;
-            goku.vx = (dragStartX - goku.x) * power;
-            goku.vy = (dragStartY - goku.y) * power;
+            // Calcular direção e força do lançamento
+            const deltaX = dragStartX - goku.x;
+            const deltaY = dragStartY - goku.y;
+            const launchDistance = Math.hypot(deltaX, deltaY);
+            const maxLaunchDistance = 150;
+
+            // Normalizar e aplicar força baseada na distância
+            const power = Math.min(launchDistance / maxLaunchDistance, 1) * 15; // Força máxima de 15
+
+            if (launchDistance > 0) {
+                goku.vx = (deltaX / launchDistance) * power * 1.5;
+                goku.vy = (deltaY / launchDistance) * power * 1.5;
+            }
+
             goku.launched = true;
             goku.trail = [];
             gameState.shotsUsed++;
@@ -457,15 +468,26 @@ function initGame() {
             // Predict trajectory
             let predX = dragStartX;
             let predY = dragStartY;
-            let predVx = (dragStartX - goku.x) * 0.3;
-            let predVy = (dragStartY - goku.y) * 0.3;
+
+            // Usar a mesma lógica do lançamento real
+            const deltaX = dragStartX - goku.x;
+            const deltaY = dragStartY - goku.y;
+            const trajDistance = Math.hypot(deltaX, deltaY);
+            const maxTrajDistance = 150;
+            const trajPower = Math.min(trajDistance / maxTrajDistance, 1) * 15;
+
+            let predVx = 0;
+            let predVy = 0;
+
+            if (trajDistance > 0) {
+                predVx = (deltaX / trajDistance) * trajPower * 1.5;
+                predVy = (deltaY / trajDistance) * trajPower * 1.5;
+            }
 
             for (let i = 0; i < 50; i++) {
-                predVy += gravity * 0.8;
+                predVy += gravity;
                 predX += predVx;
                 predY += predVy;
-                predVx *= 0.995;
-                predVy *= 0.998;
 
                 if (predY > canvas.height - 40) break;
                 if (i % 3 === 0) ctx.lineTo(predX, predY);
