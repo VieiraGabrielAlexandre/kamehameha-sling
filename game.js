@@ -229,7 +229,10 @@ class PowerUp {
             'speed': { color: '#00ff00', name: 'Velocidade Extra' },
             'multishot': { color: '#ff00ff', name: 'Tiro Múltiplo' },
             'pierce': { color: '#00ffff', name: 'Tiro Perfurante' },
-            'giant': { color: '#ffff00', name: 'Goku Gigante' }
+            'giant': { color: '#ffff00', name: 'Goku Gigante' },
+            'vegeta': { color: '#0000ff', name: 'Vegeta' },
+            'trunks': { color: '#9370db', name: 'Trunks' },
+            'gohan': { color: '#ffd700', name: 'Gohan' }
         };
     }
 
@@ -303,6 +306,52 @@ class Enemy {
             }
         }
 
+        // Cell behavior - teleports and regenerates
+        if (this.type === 'cell') {
+            this.x += this.moveSpeed * this.moveDirection;
+            if (Math.abs(this.x - this.originalX) > 80) {
+                this.moveDirection *= -1;
+            }
+            this.specialTimer++;
+            if (this.specialTimer > 300 && this.health < this.maxHealth) {
+                this.health = Math.min(this.health + 1, this.maxHealth);
+                this.specialTimer = 0;
+                particleSystem.addExplosion(this.x, this.y, '#00ff00', 10);
+            }
+        }
+
+        // Cooler behavior - rapid fire
+        if (this.type === 'cooler') {
+            this.shootTimer++;
+            if (this.shootTimer > 60) { // Shoots faster
+                this.shoot();
+                this.shootTimer = 0;
+            }
+        }
+
+        // Broly behavior - charges and becomes stronger
+        if (this.type === 'broly') {
+            this.specialTimer++;
+            if (this.specialTimer > 240) {
+                this.charging = true;
+                this.moveSpeed = 3;
+                this.specialTimer = 0;
+                particleSystem.addExplosion(this.x, this.y, '#ffff00', 20);
+            }
+            if (this.charging) {
+                this.x += this.moveSpeed * this.moveDirection;
+                if (Math.abs(this.x - this.originalX) > 150) {
+                    this.moveDirection *= -1;
+                    this.charging = false;
+                    this.moveSpeed = 2;
+                }
+            } else {
+                this.x += this.moveSpeed * this.moveDirection;
+                if (Math.abs(this.x - this.originalX) > 100) {
+                    this.moveDirection *= -1;
+                }
+            }
+        }
         // Shooting for shooter enemies
         if (this.type === 'shooter') {
             this.shootTimer++;
@@ -326,14 +375,30 @@ class Enemy {
     }
 
     shoot() {
-        this.projectiles.push({
-            x: this.x,
-            y: this.y,
-            vx: -2,
-            vy: 2,
-            life: 180,
-            radius: 5
-        });
+        if (this.type === 'cooler') {
+            // Triple shot
+            for (let i = -1; i <= 1; i++) {
+                this.projectiles.push({
+                    x: this.x,
+                    y: this.y,
+                    vx: -3 + i * 0.5,
+                    vy: 2 + i * 0.3,
+                    life: 180,
+                    radius: 4,
+                    color: '#800080'
+                });
+            }
+        } else {
+            this.projectiles.push({
+                x: this.x,
+                y: this.y,
+                vx: -2,
+                vy: 2,
+                life: 180,
+                radius: 5,
+                color: '#ff0000'
+            });
+        }
     }
 
     draw(ctx) {
@@ -355,6 +420,9 @@ class Enemy {
         if (this.type === 'moving') color = '#FF4500';
         if (this.type === 'shooter') color = '#DC143C';
         if (this.type === 'boss') color = '#000000';
+        if (this.type === 'cell') color = '#00ff00';
+        if (this.type === 'cooler') color = '#800080';
+        if (this.type === 'broly') color = this.charging ? '#ffff00' : '#228B22';
 
         if (healthRatio < 0.7) color = '#FF4500';
         if (healthRatio < 0.4) color = '#FF0000';
@@ -386,6 +454,32 @@ class Enemy {
         } else if (this.type === 'shooter') {
             ctx.fillStyle = '#FF0000';
             ctx.fillRect(this.x - 2, this.y + 8, 4, 8);
+        } else if (this.type === 'cell') {
+            // Cell spots
+            ctx.fillStyle = '#000000';
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI / 2);
+                const spotX = this.x + Math.cos(angle) * 10;
+                const spotY = this.y + Math.sin(angle) * 10;
+                ctx.beginPath();
+                ctx.arc(spotX, spotY, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else if (this.type === 'cooler') {
+            // Cooler mask
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(this.x - 12, this.y - 8, 24, 6);
+        } else if (this.type === 'broly') {
+            // Broly spikes
+            ctx.fillStyle = '#000000';
+            for (let i = 0; i < 6; i++) {
+                const angle = (i * Math.PI / 3);
+                const spikeX = this.x + Math.cos(angle) * 20;
+                const spikeY = this.y + Math.sin(angle) * 20;
+                ctx.beginPath();
+                ctx.arc(spikeX, spikeY, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         // Health bar
@@ -407,8 +501,8 @@ class Enemy {
         }
 
         // Draw projectiles
-        ctx.fillStyle = '#FF0000';
         this.projectiles.forEach(proj => {
+            ctx.fillStyle = proj.color || '#FF0000';
             ctx.beginPath();
             ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
             ctx.fill();
@@ -416,6 +510,168 @@ class Enemy {
 
         if (this.hitAnimation > 0) {
             ctx.restore();
+        }
+    }
+}
+class Ally {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.startX = x;
+        this.startY = y;
+        this.type = type;
+        this.radius = 20;
+        this.vx = 0;
+        this.vy = 0;
+        this.launched = false;
+        this.trail = [];
+        this.active = true;
+
+        // Different mechanics per ally
+        this.mechanics = {
+            'vegeta': { force: 25, gravity: 0.25, color: '#0000ff', special: 'explosive' },
+            'trunks': { force: 30, gravity: 0.2, color: '#9370db', special: 'sword' },
+            'gohan': { force: 35, gravity: 0.15, color: '#ffd700', special: 'kamehameha' }
+        };
+    }
+
+    update() {
+        if (!this.launched || !this.active) return;
+
+        // Add to trail
+        this.trail.push({ x: this.x, y: this.y });
+        if (this.trail.length > 15) this.trail.shift();
+
+        // Physics
+        const mechanic = this.mechanics[this.type];
+        this.vy += mechanic.gravity;
+        this.vx *= friction;
+        this.vy *= friction;
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Boundaries
+        if (this.y - this.radius < 0) {
+            this.y = this.radius;
+            this.vy *= -bounceReduction;
+        }
+
+        if (this.y + this.radius > canvas.height - 40) {
+            this.y = canvas.height - 40 - this.radius;
+            this.vy *= -bounceReduction;
+        }
+
+        if (this.x - this.radius < 0) {
+            this.x = this.radius;
+            this.vx *= -bounceReduction;
+        }
+        if (this.x + this.radius > canvas.width) {
+            this.x = canvas.width - this.radius;
+            this.vx *= -bounceReduction;
+        }
+
+        // Reset conditions
+        if ((Math.abs(this.vx) < 1.0 && Math.abs(this.vy) < 1.0 && this.y > canvas.height - 100) ||
+            this.y > canvas.height + 100) {
+            this.reset();
+        }
+    }
+
+    reset() {
+        this.x = this.startX;
+        this.y = this.startY;
+        this.vx = 0;
+        this.vy = 0;
+        this.launched = false;
+        this.trail = [];
+    }
+
+    launch(deltaX, deltaY, distance) {
+        const mechanic = this.mechanics[this.type];
+        const force = Math.min(distance / 50, 2) * mechanic.force;
+        this.vx = (deltaX / distance) * force;
+        this.vy = (deltaY / distance) * force;
+        this.launched = true;
+        this.trail = [];
+
+        // Special effects
+        if (this.type === 'vegeta') {
+            particleSystem.addExplosion(this.x, this.y, '#0000ff', 15);
+        } else if (this.type === 'trunks') {
+            particleSystem.addExplosion(this.x, this.y, '#9370db', 12);
+        } else if (this.type === 'gohan') {
+            particleSystem.addExplosion(this.x, this.y, '#ffd700', 20);
+        }
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+
+        const mechanic = this.mechanics[this.type];
+
+        // Trail
+        if (this.launched && this.trail.length > 0) {
+            ctx.strokeStyle = mechanic.color;
+            ctx.lineWidth = 3;
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(this.trail[0].x, this.trail[0].y);
+            for (let i = 1; i < this.trail.length; i++) {
+                ctx.lineTo(this.trail[i].x, this.trail[i].y);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
+        // Body
+        ctx.fillStyle = mechanic.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Face
+        ctx.fillStyle = '#ffdbac';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y - 3, this.radius * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(this.x - 6, this.y - 8, 2, 0, Math.PI * 2);
+        ctx.arc(this.x + 6, this.y - 8, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Special features
+        if (this.type === 'vegeta') {
+            // Vegeta hair
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(this.x - 8, this.y - 15, 6, 0, Math.PI * 2);
+            ctx.arc(this.x + 8, this.y - 15, 6, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.type === 'trunks') {
+            // Trunks hair
+            ctx.fillStyle = '#9370db';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y - 18, 10, 0, Math.PI * 2);
+            ctx.fill();
+            // Sword
+            if (!this.launched) {
+                ctx.strokeStyle = '#c0c0c0';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(this.x + 15, this.y - 10);
+                ctx.lineTo(this.x + 15, this.y + 10);
+                ctx.stroke();
+            }
+        } else if (this.type === 'gohan') {
+            // Gohan hair
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y - 16, 8, 0, Math.PI * 2);
+            ctx.fill();
         }
     }
 }
@@ -431,6 +687,7 @@ class GameState {
         this.stars = 0;
         this.totalStars = 0;
         this.activePowerUps = [];
+        this.allies = [];
         this.upgrades = {
             force: 1,
             precision: 1,
@@ -470,6 +727,8 @@ class GameState {
         this.dragonBallCollected = false;
         this.stars = 0;
         this.activePowerUps = [];
+        this.allies = [];
+        this.allies = [];
         this.levelCompleting = false;
         this.gameOverTriggered = false;
         document.getElementById('scoreDisplay').textContent = this.score;
@@ -477,10 +736,17 @@ class GameState {
     }
 
     addPowerUp(type) {
-        this.activePowerUps.push({
-            type: type,
-            duration: 300 // 5 seconds at 60fps
-        });
+        if (['vegeta', 'trunks', 'gohan'].includes(type)) {
+            // Add ally
+            const allyX = 200 + this.allies.length * 80;
+            const allyY = canvas.height - 100;
+            this.allies.push(new Ally(allyX, allyY, type));
+        } else {
+            this.activePowerUps.push({
+                type: type,
+                duration: 900 // 15 seconds at 60fps (3x longer)
+            });
+        }
     }
 
     updatePowerUps() {
@@ -499,7 +765,7 @@ class GameState {
 
 let canvas, ctx, gameState, soundManager, particleSystem;
 let goku = {};
-let levels, enemies, dragonBall, powerUps = [];
+let levels, enemies, dragonBall, powerUps = [], allies = [];
 let dragging = false;
 let dragStartX, dragStartY;
 let animationId;
@@ -560,19 +826,51 @@ function initGame() {
 
         levels = [
             // Level 1 - Easy
-            [{ x: w - 150, y: h - 80, health: 1, type: 'normal' }],
+            [
+                { x: w - 150, y: h - 80, health: 1, type: 'normal' },
+                { x: w - 250, y: h - 120, health: 1, type: 'normal' },
+                { x: w - 200, y: h - 160, health: 1, type: 'moving' },
+                { x: w - 100, y: h - 200, health: 1, type: 'normal' },
+                { x: w - 300, y: h - 80, health: 1, type: 'shooter' },
+                { x: w - 80, y: h - 120, health: 1, type: 'normal' }
+            ],
 
             // Level 2 - Medium
             [
                 { x: w - 200, y: h - 80, health: 1, type: 'normal' },
-                { x: w - 120, y: h - 150, health: 1, type: 'moving' }
+                { x: w - 120, y: h - 150, health: 1, type: 'moving' },
+                { x: w - 300, y: h - 100, health: 2, type: 'cell' },
+                { x: w - 150, y: h - 200, health: 1, type: 'shooter' },
+                { x: w - 80, y: h - 80, health: 1, type: 'normal' },
+                { x: w - 250, y: h - 180, health: 1, type: 'moving' },
+                { x: w - 350, y: h - 120, health: 1, type: 'normal' },
+                { x: w - 100, y: h - 160, health: 1, type: 'shooter' },
+                { x: w - 180, y: h - 240, health: 1, type: 'normal' },
+                { x: w - 320, y: h - 160, health: 1, type: 'cell' },
+                { x: w - 60, y: h - 200, health: 1, type: 'moving' },
+                { x: w - 280, y: h - 220, health: 1, type: 'normal' }
             ],
 
             // Level 3 - Hard
             [
                 { x: w - 250, y: h - 80, health: 2, type: 'normal' },
                 { x: w - 150, y: h - 120, health: 1, type: 'shooter' },
-                { x: w - 80, y: h - 180, health: 1, type: 'moving' }
+                { x: w - 80, y: h - 180, health: 1, type: 'moving' },
+                { x: w - 350, y: h - 100, health: 3, type: 'cooler' },
+                { x: w - 200, y: h - 200, health: 2, type: 'cell' },
+                { x: w - 120, y: h - 260, health: 1, type: 'shooter' },
+                { x: w - 300, y: h - 160, health: 2, type: 'moving' },
+                { x: w - 100, y: h - 80, health: 1, type: 'normal' },
+                { x: w - 180, y: h - 140, health: 2, type: 'shooter' },
+                { x: w - 320, y: h - 220, health: 1, type: 'cell' },
+                { x: w - 60, y: h - 160, health: 1, type: 'moving' },
+                { x: w - 280, y: h - 100, health: 2, type: 'normal' },
+                { x: w - 150, y: h - 280, health: 1, type: 'cooler' },
+                { x: w - 220, y: h - 320, health: 1, type: 'shooter' },
+                { x: w - 380, y: h - 180, health: 2, type: 'moving' },
+                { x: w - 90, y: h - 240, health: 1, type: 'cell' },
+                { x: w - 260, y: h - 300, health: 1, type: 'normal' },
+                { x: w - 340, y: h - 260, health: 2, type: 'shooter' }
             ],
 
             // Level 4 - Very Hard
@@ -580,22 +878,75 @@ function initGame() {
                 { x: w - 300, y: h - 80, health: 2, type: 'shooter' },
                 { x: w - 200, y: h - 140, health: 2, type: 'moving' },
                 { x: w - 100, y: h - 200, health: 1, type: 'normal' },
-                { x: w - 150, y: h - 260, health: 1, type: 'shooter' }
+                { x: w - 150, y: h - 260, health: 1, type: 'shooter' },
+                { x: w - 400, y: h - 120, health: 4, type: 'broly' },
+                { x: w - 250, y: h - 180, health: 3, type: 'cooler' },
+                { x: w - 80, y: h - 100, health: 2, type: 'cell' },
+                { x: w - 350, y: h - 200, health: 2, type: 'moving' },
+                { x: w - 180, y: h - 80, health: 2, type: 'shooter' },
+                { x: w - 120, y: h - 320, health: 1, type: 'normal' },
+                { x: w - 280, y: h - 240, health: 3, type: 'cell' },
+                { x: w - 60, y: h - 180, health: 2, type: 'moving' },
+                { x: w - 320, y: h - 140, health: 2, type: 'cooler' },
+                { x: w - 220, y: h - 300, health: 1, type: 'shooter' },
+                { x: w - 380, y: h - 260, health: 2, type: 'broly' },
+                { x: w - 140, y: h - 160, health: 2, type: 'cell' },
+                { x: w - 300, y: h - 320, health: 1, type: 'moving' },
+                { x: w - 90, y: h - 280, health: 2, type: 'shooter' },
+                { x: w - 260, y: h - 120, health: 3, type: 'cooler' },
+                { x: w - 160, y: h - 220, health: 2, type: 'normal' },
+                { x: w - 340, y: h - 300, health: 2, type: 'cell' },
+                { x: w - 200, y: h - 360, health: 1, type: 'broly' },
+                { x: w - 110, y: h - 140, health: 2, type: 'moving' },
+                { x: w - 290, y: h - 280, health: 2, type: 'shooter' }
             ],
 
             // Level 5 - Boss Level
             [
                 { x: w - 200, y: h - 150, health: 5, type: 'boss' },
                 { x: w - 350, y: h - 80, health: 2, type: 'shooter' },
-                { x: w - 80, y: h - 220, health: 2, type: 'moving' }
+                { x: w - 80, y: h - 220, health: 2, type: 'moving' },
+                { x: w - 450, y: h - 120, health: 6, type: 'broly' },
+                { x: w - 300, y: h - 200, health: 4, type: 'cooler' },
+                { x: w - 150, y: h - 280, health: 3, type: 'cell' },
+                { x: w - 100, y: h - 80, health: 3, type: 'shooter' },
+                { x: w - 250, y: h - 320, health: 2, type: 'moving' },
+                { x: w - 400, y: h - 240, health: 3, type: 'cell' },
+                { x: w - 50, y: h - 160, health: 2, type: 'cooler' },
+                { x: w - 320, y: h - 100, health: 3, type: 'shooter' },
+                { x: w - 180, y: h - 200, health: 2, type: 'moving' },
+                { x: w - 280, y: h - 260, health: 4, type: 'broly' },
+                { x: w - 120, y: h - 340, health: 2, type: 'cell' },
+                { x: w - 380, y: h - 180, health: 3, type: 'cooler' },
+                { x: w - 220, y: h - 100, health: 2, type: 'shooter' },
+                { x: w - 90, y: h - 300, health: 2, type: 'moving' },
+                { x: w - 340, y: h - 280, health: 3, type: 'cell' },
+                { x: w - 160, y: h - 120, health: 2, type: 'broly' },
+                { x: w - 270, y: h - 180, health: 3, type: 'cooler' },
+                { x: w - 130, y: h - 260, health: 2, type: 'shooter' },
+                { x: w - 310, y: h - 340, health: 2, type: 'moving' },
+                { x: w - 60, y: h - 240, health: 3, type: 'cell' },
+                { x: w - 240, y: h - 300, health: 2, type: 'broly' },
+                { x: w - 360, y: h - 160, health: 3, type: 'cooler' }
             ]
         ];
     }
 
     function spawnPowerUps() {
         powerUps = [];
-        if (Math.random() < 0.3) { // 30% chance
-            const types = ['speed', 'multishot', 'pierce', 'giant'];
+        if (Math.random() < 0.5) { // 50% chance
+            const types = ['speed', 'multishot', 'pierce', 'giant', 'vegeta', 'trunks', 'gohan'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            powerUps.push(new PowerUp(
+                Math.random() * (canvas.width - 200) + 100,
+                Math.random() * (canvas.height - 200) + 100,
+                type
+            ));
+        }
+
+        // Chance for second power-up
+        if (Math.random() < 0.3) {
+            const types = ['speed', 'multishot', 'pierce', 'giant', 'vegeta', 'trunks', 'gohan'];
             const type = types[Math.floor(Math.random() * types.length)];
             powerUps.push(new PowerUp(
                 Math.random() * (canvas.width - 200) + 100,
@@ -652,7 +1003,18 @@ function initGame() {
     }
 
     function isInsideGoku(x, y) {
-        return Math.hypot(x - goku.x, y - goku.y) < goku.radius;
+        if (!goku.launched && Math.hypot(x - goku.x, y - goku.y) < goku.radius) {
+            return { type: 'goku', character: goku };
+        }
+
+        // Check allies
+        for (let ally of gameState.allies) {
+            if (!ally.launched && Math.hypot(x - ally.x, y - ally.y) < ally.radius) {
+                return { type: 'ally', character: ally };
+            }
+        }
+
+        return null;
     }
 
     function updatePowerMeter() {
@@ -667,13 +1029,22 @@ function initGame() {
         document.getElementById('powerFill').style.width = power + '%';
     }
 
+    let selectedCharacter = null;
+
     function onDragStart(e) {
         e.preventDefault();
         const { x, y } = getPointerPos(e);
-        if (isInsideGoku(x, y) && !goku.launched) {
+        const character = isInsideGoku(x, y);
+        if (character) {
             dragging = true;
-            dragStartX = goku.startX;
-            dragStartY = goku.startY;
+            selectedCharacter = character;
+            if (character.type === 'goku') {
+                dragStartX = goku.startX;
+                dragStartY = goku.startY;
+            } else {
+                dragStartX = character.character.startX;
+                dragStartY = character.character.startY;
+            }
         }
     }
 
@@ -707,39 +1078,47 @@ function initGame() {
     }
 
     function launchGoku() {
-        const deltaX = dragStartX - goku.x;
-        const deltaY = dragStartY - goku.y;
+        if (!selectedCharacter) return;
+
+        const char = selectedCharacter.character;
+        const deltaX = dragStartX - char.x;
+        const deltaY = dragStartY - char.y;
         const distance = Math.hypot(deltaX, deltaY);
 
         if (distance > 5) {
-            const currentForce = gameState.superSaiyajin ? superForce : normalForce;
-            const forceMultiplier = gameState.hasPowerUp('speed') ? 1.5 : 1;
-            const maxForce = currentForce * gameState.upgrades.force * forceMultiplier;
+            if (selectedCharacter.type === 'goku') {
+                const currentForce = gameState.superSaiyajin ? superForce : normalForce;
+                const forceMultiplier = gameState.hasPowerUp('speed') ? 1.5 : 1;
+                const maxForce = currentForce * gameState.upgrades.force * forceMultiplier;
 
-            const force = Math.min(distance / 50, 2) * maxForce;
-            goku.vx = (deltaX / distance) * force;
-            goku.vy = (deltaY / distance) * force;
+                const force = Math.min(distance / 50, 2) * maxForce;
+                goku.vx = (deltaX / distance) * force;
+                goku.vy = (deltaY / distance) * force;
+                goku.launched = true;
+                goku.trail = [];
+                gameState.shotsUsed++;
 
-            // Multi-shot power-up
-            if (gameState.hasPowerUp('multishot')) {
-                // Create additional Goku copies (visual effect)
-                for (let i = 0; i < 2; i++) {
-                    const angle = Math.atan2(deltaY, deltaX) + (i - 0.5) * 0.3;
-                    particleSystem.addExplosion(
-                        goku.x + Math.cos(angle) * 30,
-                        goku.y + Math.sin(angle) * 30,
-                        '#f8c927', 10
-                    );
+                // Multi-shot power-up
+                if (gameState.hasPowerUp('multishot')) {
+                    for (let i = 0; i < 2; i++) {
+                        const angle = Math.atan2(deltaY, deltaX) + (i - 0.5) * 0.3;
+                        particleSystem.addExplosion(
+                            goku.x + Math.cos(angle) * 30,
+                            goku.y + Math.sin(angle) * 30,
+                            '#f8c927', 10
+                        );
+                    }
                 }
+
+                soundManager.play('launch');
+                particleSystem.addExplosion(goku.x, goku.y, '#f8c927');
+            } else {
+                // Launch ally
+                char.launch(deltaX, deltaY, distance);
+                gameState.shotsUsed++;
+                soundManager.play('launch');
             }
         }
-
-        goku.launched = true;
-        goku.trail = [];
-        gameState.shotsUsed++;
-
-        soundManager.play('launch');
-        particleSystem.addExplosion(goku.x, goku.y, '#f8c927');
     }
 
     function onDragEnd(e) {
@@ -1143,7 +1522,8 @@ function initGame() {
         }
 
         // Check lose condition (out of shots)
-        if (gameState.shotsUsed >= gameState.maxShots && !goku.launched && !dragging && enemies.some(e => !e.hit)) {
+        const allCharactersReady = !goku.launched && gameState.allies.every(ally => !ally.launched);
+        if (gameState.shotsUsed >= gameState.maxShots && allCharactersReady && !dragging && enemies.some(e => !e.hit)) {
             if (!gameState.gameOverTriggered) {
                 gameState.gameOverTriggered = true;
                 setTimeout(() => showGameOver(), 1000);
