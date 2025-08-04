@@ -90,39 +90,127 @@ class SoundManager {
 
     loadSounds() {
         try {
-            this.sounds.launch = new Audio('assets/launch.wav');
-            this.sounds.impact = new Audio('assets/impact.wav');
-            this.sounds.powerup = new Audio('assets/powerup.wav');
-            this.sounds.transformation = new Audio('assets/transformation.wav');
-            this.sounds.bgMusic = new Audio('assets/background.mp3');
+            // Tentar carregar apenas os sons que existem
+            const soundFiles = {
+                launch: 'assets/launch.wav',
+                impact: 'assets/impact.wav',
+                bgMusic: 'assets/bgMusic.mp3' // Adicione esta linha
+            };
 
-            this.sounds.launch.volume = 0.7;
-            this.sounds.impact.volume = 0.8;
-            this.sounds.powerup.volume = 0.6;
-            this.sounds.transformation.volume = 0.9;
-            this.sounds.bgMusic.volume = 0.3;
-            this.sounds.bgMusic.loop = true;
+            Object.keys(soundFiles).forEach(key => {
+                try {
+                    this.sounds[key] = new Audio(soundFiles[key]);
+                    this.sounds[key].volume = 0.7;
+                    // Teste se o arquivo existe
+                    this.sounds[key].addEventListener('error', () => {
+                        console.log(`Sound file not found: ${soundFiles[key]}`);
+                        delete this.sounds[key];
+                    });
+
+                    if (key === 'bgMusic') {
+                        this.sounds[key].loop = true; // Adiciona loop na música
+                    }
+
+                    this.sounds[key].addEventListener('error', () => {
+                        console.log(`Sound file not found: ${soundFiles[key]}`);
+                        delete this.sounds[key];
+                    });
+                } catch (e) {
+                    console.log(`Failed to load sound: ${key}`);
+                }
+            });
+
+            // Sons que não existem - criar efeitos alternativos
+            this.createAlternativeSounds();
         } catch (e) {
-            console.log('Sounds not available');
+            console.log('Audio system not available');
+        }
+    }
+
+    createAlternativeSounds() {
+        // Criar contexto de áudio para efeitos sintéticos
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Web Audio API not available');
+            return;
+        }
+    }
+
+    playTone(frequency, duration, type = 'sine') {
+        if (!this.audioContext || !this.sfxEnabled) return;
+
+        try {
+            const oscillator = this.audioContext.createOscillator();
+            const gainNode = this.audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(this.audioContext.destination);
+
+            oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+            oscillator.type = type;
+
+            gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
+
+            oscillator.start(this.audioContext.currentTime);
+            oscillator.stop(this.audioContext.currentTime + duration);
+        } catch (e) {
+            // Silenciosamente falha se não conseguir tocar
         }
     }
 
     play(soundName) {
-        if (this.sounds[soundName] && this.sfxEnabled) {
-            this.sounds[soundName].currentTime = 0;
-            this.sounds[soundName].play().catch(() => {});
+        if (!this.sfxEnabled) return;
+
+        if (this.sounds[soundName]) {
+            try {
+                this.sounds[soundName].currentTime = 0;
+                this.sounds[soundName].play().catch(() => {});
+            } catch (e) {
+                // Falha silenciosamente
+            }
+        } else {
+            // Usar efeitos sintéticos alternativos
+            switch (soundName) {
+                case 'powerup':
+                    this.playTone(440, 0.2);
+                    setTimeout(() => this.playTone(660, 0.2), 100);
+                    break;
+                case 'transformation':
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => this.playTone(220 + i * 110, 0.3, 'sawtooth'), i * 100);
+                    }
+                    break;
+                case 'launch':
+                    this.playTone(200, 0.5, 'square');
+                    break;
+                case 'impact':
+                    this.playTone(100, 0.3, 'sawtooth');
+                    break;
+            }
         }
     }
 
     playMusic() {
-        if (this.sounds.bgMusic && this.musicEnabled) {
-            this.sounds.bgMusic.play().catch(() => {});
+        if (!this.musicEnabled) return;
+
+        if (this.sounds.bgMusic) {
+            try {
+                this.sounds.bgMusic.play().catch(() => {});
+            } catch (e) {
+                console.log('Background music not available');
+            }
         }
     }
 
     stopMusic() {
         if (this.sounds.bgMusic) {
-            this.sounds.bgMusic.pause();
+            try {
+                this.sounds.bgMusic.pause();
+            } catch (e) {
+                // Falha silenciosamente
+            }
         }
     }
 }
@@ -337,7 +425,7 @@ class GameState {
         this.score = 0;
         this.currentLevel = 0;
         this.shotsUsed = 0;
-        this.maxShots = 3;
+        this.maxShots = 8;
         this.superSaiyajin = false;
         this.dragonBallCollected = false;
         this.stars = 0;
@@ -369,6 +457,8 @@ class GameState {
         this.shotsUsed = 0;
         this.dragonBallCollected = false;
         this.activePowerUps = [];
+        this.levelCompleting = false;
+        this.gameOverTriggered = false;
         document.getElementById('levelDisplay').textContent = this.currentLevel + 1;
     }
 
@@ -380,6 +470,8 @@ class GameState {
         this.dragonBallCollected = false;
         this.stars = 0;
         this.activePowerUps = [];
+        this.levelCompleting = false;
+        this.gameOverTriggered = false;
         document.getElementById('scoreDisplay').textContent = this.score;
         document.getElementById('levelDisplay').textContent = this.currentLevel + 1;
     }
@@ -411,7 +503,6 @@ let levels, enemies, dragonBall, powerUps = [];
 let dragging = false;
 let dragStartX, dragStartY;
 let animationId;
-let camera = { x: 0, y: 0, shake: 0 };
 let wind = { strength: 0, direction: 1 };
 
 // Physics constants
@@ -450,8 +541,10 @@ function initGame() {
     function resetGoku() {
         const baseSize = gameState.hasPowerUp('giant') ? 35 : 25;
         goku = {
-            x: 100,
-            y: canvas.height - 80,
+            x: 120,
+            y: canvas.height - 100,
+            startX: 120,
+            startY: canvas.height - 100,
             radius: baseSize,
             vx: 0,
             vy: 0,
@@ -523,6 +616,10 @@ function initGame() {
             return;
         }
 
+        // Reset flags de controle
+        gameState.levelCompleting = false;
+        gameState.gameOverTriggered = false;
+
         enemies = levels[gameState.currentLevel].map(e => new Enemy(e.x, e.y, e.health, e.type));
 
         // Dragon Ball
@@ -575,13 +672,22 @@ function initGame() {
         const { x, y } = getPointerPos(e);
         if (isInsideGoku(x, y) && !goku.launched) {
             dragging = true;
-            dragStartX = goku.x;
-            dragStartY = goku.y;
+            dragStartX = goku.startX;
+            dragStartY = goku.startY;
         }
     }
 
     function onDragMove(e) {
         e.preventDefault();
+
+        if (!goku.launched && !dragging) {
+            const step = 10;
+            if (e.key === 'ArrowLeft') goku.x = Math.max(goku.x - step, goku.radius);
+            if (e.key === 'ArrowRight') goku.x = Math.min(goku.x + step, canvas.width - goku.radius);
+            if (e.key === 'ArrowUp') goku.y = Math.max(goku.y - step, goku.radius);
+            if (e.key === 'ArrowDown') goku.y = Math.min(goku.y + step, canvas.height - 40 - goku.radius);
+        }
+
         if (!dragging || goku.launched) return;
 
         const { x, y } = getPointerPos(e);
@@ -700,16 +806,6 @@ function initGame() {
     }
 
     function drawGoku() {
-        // Camera shake effect
-        if (camera.shake > 0) {
-            ctx.save();
-            ctx.translate(
-                (Math.random() - 0.5) * camera.shake,
-                (Math.random() - 0.5) * camera.shake
-            );
-            camera.shake *= 0.9;
-        }
-
         // Super Saiyajin aura
         if (gameState.superSaiyajin) {
             ctx.save();
@@ -769,10 +865,6 @@ function initGame() {
             ctx.arc(goku.x + 10, goku.y - 15, 8, 0, Math.PI * 2);
         }
         ctx.fill();
-
-        if (camera.shake > 0) {
-            ctx.restore();
-        }
     }
 
     function drawDragonBall() {
@@ -915,13 +1007,19 @@ function initGame() {
             goku.x += goku.vx;
             goku.y += goku.vy;
 
+            // Teto invisível - impede que Goku saia pela parte superior
+            if (goku.y - goku.radius < 0) {
+                goku.y = goku.radius;
+                goku.vy *= -bounceReduction;
+                particleSystem.addExplosion(goku.x, goku.y, '#87CEEB');
+            }
+
             // Ground collision
             if (goku.y + goku.radius > canvas.height - 40) {
                 goku.y = canvas.height - 40 - goku.radius;
                 goku.vy *= -bounceReduction;
                 if (Math.abs(goku.vy) > 2) {
                     particleSystem.addExplosion(goku.x, goku.y, '#8B4513');
-                    camera.shake = 10;
                 }
             }
 
@@ -929,10 +1027,12 @@ function initGame() {
             if (goku.x - goku.radius < 0) {
                 goku.x = goku.radius;
                 goku.vx *= -bounceReduction;
+                particleSystem.addExplosion(goku.x, goku.y, '#8B4513');
             }
             if (goku.x + goku.radius > canvas.width) {
                 goku.x = canvas.width - goku.radius;
                 goku.vx *= -bounceReduction;
+                particleSystem.addExplosion(goku.x, goku.y, '#8B4513');
             }
 
             // Reset conditions
@@ -963,7 +1063,6 @@ function initGame() {
                         gameState.addScore(points);
                         particleSystem.addExplosion(enemy.x, enemy.y, '#ff0000', 25);
                         soundManager.play('impact');
-                        camera.shake = 15;
                     } else {
                         particleSystem.addExplosion(enemy.x, enemy.y, '#ffff00');
                     }
@@ -983,7 +1082,6 @@ function initGame() {
                         enemy.projectiles.splice(i, 1);
                         // Damage or effect on Goku
                         particleSystem.addExplosion(goku.x, goku.y, '#ff0000');
-                        camera.shake = 8;
                     }
                 });
             }
@@ -1000,7 +1098,6 @@ function initGame() {
 
                 particleSystem.addTransformation(dragonBall.x, dragonBall.y);
                 soundManager.play('transformation');
-                camera.shake = 20;
             }
         }
 
@@ -1039,12 +1136,18 @@ function initGame() {
 
         // Check win condition
         if (enemies.every(e => e.hit)) {
-            setTimeout(() => showLevelComplete(), 1000);
+            if (!gameState.levelCompleting) {
+                gameState.levelCompleting = true;
+                setTimeout(() => showLevelComplete(), 1000);
+            }
         }
 
         // Check lose condition (out of shots)
-        if (gameState.shotsUsed >= gameState.maxShots && !goku.launched && enemies.some(e => !e.hit)) {
-            setTimeout(() => showGameOver(), 1000);
+        if (gameState.shotsUsed >= gameState.maxShots && !goku.launched && !dragging && enemies.some(e => !e.hit)) {
+            if (!gameState.gameOverTriggered) {
+                gameState.gameOverTriggered = true;
+                setTimeout(() => showGameOver(), 1000);
+            }
         }
 
         animationId = requestAnimationFrame(update);
@@ -1112,6 +1215,6 @@ function initGame() {
         } else {
             soundManager.stopMusic();
         }
-        document.getElementById('musicToggle').textContent = soundManager.musicEnabled ? '🎵' : '🎵';
+        document.getElementById('musicToggle').textContent = soundManager.musicEnabled ? '🎵' : '🔇';
     };
 }
