@@ -15,8 +15,8 @@ jobs:
       - name: Deploy via FTP para Locaweb
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secrets.HOST }}
-          username: ${{ secrets.USER }}
-          password: ${{ secrets.PASS }}
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
           local-dir: ${{ secrets.LOCA_DIR }}
           server-dir: ${{ secrets.LOCA_DIR }}
