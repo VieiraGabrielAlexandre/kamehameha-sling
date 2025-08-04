@@ -763,6 +763,39 @@ class GameState {
     }
 }
 
+function launchAlly(allyType) {
+    console.log('Launching ally:', allyType);
+
+    // Set ally as current character
+    goku.character = allyType;
+
+    // Set ally properties
+    const allyProps = {
+        'vegeta': { color: '#0066ff', force: 1.2, gravity: 0.4 },
+        'trunks': { color: '#9966ff', force: 1.5, gravity: 0.3 },
+        'gohan': { color: '#ffcc00', force: 1.1, gravity: 0.5 }
+    };
+
+    if (allyProps[allyType]) {
+        goku.color = allyProps[allyType].color;
+        goku.force = allyProps[allyType].force;
+        goku.gravity = allyProps[allyType].gravity;
+        console.log('Ally properties set:', allyProps[allyType]);
+    }
+
+    // Auto-launch with medium power
+    const angle = -Math.PI / 4; // 45 degrees up
+    const power = 0.7;
+
+    goku.vx = Math.cos(angle) * power * 15;
+    goku.vy = Math.sin(angle) * power * 15;
+    goku.launched = true;
+
+    console.log('Ally launched with velocity:', goku.vx, goku.vy);
+
+    soundManager.playSound('launch');
+}
+
 function updateUI() {
     document.getElementById('levelDisplay').textContent = gameState.level;
     document.getElementById('scoreDisplay').textContent = gameState.score;
