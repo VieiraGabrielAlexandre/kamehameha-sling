@@ -132,6 +132,8 @@ canvas {
     background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0.4));
     backdrop-filter: blur(10px);
     border-bottom: 2px solid rgba(248, 201, 39, 0.3);
+    flex-wrap: wrap;
+    gap: 15px;
 }
 
 .level-info, .score-info {
@@ -164,6 +166,34 @@ canvas {
     background: linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000);
     border-radius: 8px;
     transition: width 0.1s ease;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+}
+
+.controls button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.controls button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(248, 201, 39, 0.8);
+}
+
+.stars-display {
+    font-size: 2em;
+    color: #FFD700;
+    margin: 20px 0;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }
 
 #resetButton {
@@ -243,6 +273,20 @@ canvas {
     box-shadow: 0 5px 15px rgba(248, 54, 0, 0.4);
 }
 
+/* Power-up indicators */
+.powerup-active {
+    position: fixed;
+    left: 10px;
+    top: 150px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #f8c927;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    border: 2px solid rgba(248, 201, 39, 0.5);
+}
+
 /* Efeitos de partículas */
 .particle {
     position: absolute;
@@ -274,5 +318,15 @@ canvas {
 
     .power-meter {
         order: -1;
+    }
+
+    .hud {
+        justify-content: center;
+    }
+
+    .controls {
+        order: 1;
+        width: 100%;
+        justify-content: center;
     }
 }

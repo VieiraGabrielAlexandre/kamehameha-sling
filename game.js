@@ -3,17 +3,18 @@ class ParticleSystem {
         this.particles = [];
     }
 
-    addExplosion(x, y, color = '#ff6b00') {
-        for (let i = 0; i < 15; i++) {
+    addExplosion(x, y, color = '#ff6b00', count = 15) {
+        for (let i = 0; i < count; i++) {
             this.particles.push({
                 x: x,
                 y: y,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 0.5) * 10,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.5) * 12,
                 life: 1.0,
                 decay: 0.02,
                 color: color,
-                size: Math.random() * 5 + 2
+                size: Math.random() * 6 + 2,
+                type: 'explosion'
             });
         }
     }
@@ -27,8 +28,25 @@ class ParticleSystem {
             life: 0.8,
             decay: 0.05,
             color: '#f8c927',
-            size: Math.random() * 3 + 1
+            size: Math.random() * 3 + 1,
+            type: 'trail'
         });
+    }
+
+    addTransformation(x, y) {
+        for (let i = 0; i < 50; i++) {
+            this.particles.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 15,
+                vy: (Math.random() - 0.5) * 15,
+                life: 2.0,
+                decay: 0.01,
+                color: Math.random() > 0.5 ? '#f8c927' : '#ffff00',
+                size: Math.random() * 8 + 3,
+                type: 'transformation'
+            });
+        }
     }
 
     update(ctx) {
@@ -48,6 +66,12 @@ class ParticleSystem {
             ctx.save();
             ctx.globalAlpha = p.life;
             ctx.fillStyle = p.color;
+
+            if (p.type === 'transformation') {
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = p.color;
+            }
+
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
             ctx.fill();
@@ -59,6 +83,8 @@ class ParticleSystem {
 class SoundManager {
     constructor() {
         this.sounds = {};
+        this.musicEnabled = true;
+        this.sfxEnabled = true;
         this.loadSounds();
     }
 
@@ -66,17 +92,242 @@ class SoundManager {
         try {
             this.sounds.launch = new Audio('assets/launch.wav');
             this.sounds.impact = new Audio('assets/impact.wav');
+            this.sounds.powerup = new Audio('assets/powerup.wav');
+            this.sounds.transformation = new Audio('assets/transformation.wav');
+            this.sounds.bgMusic = new Audio('assets/background.mp3');
+
             this.sounds.launch.volume = 0.7;
             this.sounds.impact.volume = 0.8;
+            this.sounds.powerup.volume = 0.6;
+            this.sounds.transformation.volume = 0.9;
+            this.sounds.bgMusic.volume = 0.3;
+            this.sounds.bgMusic.loop = true;
         } catch (e) {
             console.log('Sounds not available');
         }
     }
 
     play(soundName) {
-        if (this.sounds[soundName]) {
+        if (this.sounds[soundName] && this.sfxEnabled) {
             this.sounds[soundName].currentTime = 0;
             this.sounds[soundName].play().catch(() => {});
+        }
+    }
+
+    playMusic() {
+        if (this.sounds.bgMusic && this.musicEnabled) {
+            this.sounds.bgMusic.play().catch(() => {});
+        }
+    }
+
+    stopMusic() {
+        if (this.sounds.bgMusic) {
+            this.sounds.bgMusic.pause();
+        }
+    }
+}
+
+class PowerUp {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.collected = false;
+        this.rotation = 0;
+        this.pulse = 0;
+        this.radius = 15;
+
+        this.effects = {
+            'speed': { color: '#00ff00', name: 'Velocidade Extra' },
+            'multishot': { color: '#ff00ff', name: 'Tiro Múltiplo' },
+            'pierce': { color: '#00ffff', name: 'Tiro Perfurante' },
+            'giant': { color: '#ffff00', name: 'Goku Gigante' }
+        };
+    }
+
+    update() {
+        this.rotation += 0.05;
+        this.pulse += 0.1;
+    }
+
+    draw(ctx) {
+        if (this.collected) return;
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+
+        // Glow effect
+        const glowSize = this.radius + Math.sin(this.pulse) * 3;
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = this.effects[this.type].color;
+        ctx.beginPath();
+        ctx.arc(0, 0, glowSize, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Power-up body
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = this.effects[this.type].color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Symbol
+        ctx.fillStyle = '#000';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.type[0].toUpperCase(), 0, 5);
+
+        ctx.restore();
+    }
+}
+
+class Enemy {
+    constructor(x, y, health, type = 'normal') {
+        this.x = x;
+        this.y = y;
+        this.health = health;
+        this.maxHealth = health;
+        this.type = type;
+        this.hit = false;
+        this.hitAnimation = 0;
+        this.moveSpeed = 0;
+        this.moveDirection = 1;
+        this.originalX = x;
+        this.shootTimer = 0;
+        this.projectiles = [];
+
+        if (type === 'moving') {
+            this.moveSpeed = 1;
+        } else if (type === 'shooter') {
+            this.shootTimer = Math.random() * 180;
+        }
+    }
+
+    update() {
+        if (this.hit) return;
+
+        // Movement for moving enemies
+        if (this.type === 'moving') {
+            this.x += this.moveSpeed * this.moveDirection;
+            if (Math.abs(this.x - this.originalX) > 100) {
+                this.moveDirection *= -1;
+            }
+        }
+
+        // Shooting for shooter enemies
+        if (this.type === 'shooter') {
+            this.shootTimer++;
+            if (this.shootTimer > 120) { // Shoot every 2 seconds
+                this.shoot();
+                this.shootTimer = 0;
+            }
+        }
+
+        // Update projectiles
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const proj = this.projectiles[i];
+            proj.x += proj.vx;
+            proj.y += proj.vy;
+            proj.life--;
+
+            if (proj.life <= 0 || proj.y > canvas.height) {
+                this.projectiles.splice(i, 1);
+            }
+        }
+    }
+
+    shoot() {
+        this.projectiles.push({
+            x: this.x,
+            y: this.y,
+            vx: -2,
+            vy: 2,
+            life: 180,
+            radius: 5
+        });
+    }
+
+    draw(ctx) {
+        if (this.hit) return;
+
+        // Hit animation
+        if (this.hitAnimation > 0) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(Math.sin(this.hitAnimation * 0.5) * 0.2);
+            ctx.translate(-this.x, -this.y);
+            this.hitAnimation--;
+        }
+
+        // Health-based color and type-based appearance
+        const healthRatio = this.health / this.maxHealth;
+        let color = '#8B008B'; // Purple for normal
+
+        if (this.type === 'moving') color = '#FF4500';
+        if (this.type === 'shooter') color = '#DC143C';
+        if (this.type === 'boss') color = '#000000';
+
+        if (healthRatio < 0.7) color = '#FF4500';
+        if (healthRatio < 0.4) color = '#FF0000';
+
+        // Enemy body
+        const size = this.type === 'boss' ? 35 : 25;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, size, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Enemy face
+        ctx.fillStyle = '#E6E6FA';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, size - 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#FF0000';
+        ctx.beginPath();
+        ctx.arc(this.x - 8, this.y - 5, 4, 0, Math.PI * 2);
+        ctx.arc(this.x + 8, this.y - 5, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Type indicator
+        if (this.type === 'moving') {
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(this.x - 3, this.y + 10, 6, 3);
+        } else if (this.type === 'shooter') {
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(this.x - 2, this.y + 8, 4, 8);
+        }
+
+        // Health bar
+        if (this.maxHealth > 1) {
+            const barWidth = 40;
+            const barHeight = 6;
+            const barX = this.x - barWidth / 2;
+            const barY = this.y - (this.type === 'boss' ? 50 : 40);
+
+            ctx.fillStyle = '#333';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+
+            ctx.fillStyle = healthRatio > 0.5 ? '#00ff00' : healthRatio > 0.25 ? '#ffff00' : '#ff0000';
+            ctx.fillRect(barX, barY, barWidth * healthRatio, barHeight);
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+        }
+
+        // Draw projectiles
+        ctx.fillStyle = '#FF0000';
+        this.projectiles.forEach(proj => {
+            ctx.beginPath();
+            ctx.arc(proj.x, proj.y, proj.radius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        if (this.hitAnimation > 0) {
+            ctx.restore();
         }
     }
 }
@@ -89,6 +340,14 @@ class GameState {
         this.maxShots = 3;
         this.superSaiyajin = false;
         this.dragonBallCollected = false;
+        this.stars = 0;
+        this.totalStars = 0;
+        this.activePowerUps = [];
+        this.upgrades = {
+            force: 1,
+            precision: 1,
+            luck: 1
+        };
     }
 
     addScore(points) {
@@ -96,10 +355,20 @@ class GameState {
         document.getElementById('scoreDisplay').textContent = this.score;
     }
 
+    calculateStars() {
+        let stars = 1; // Base star
+        if (this.shotsUsed <= 2) stars++;
+        if (this.dragonBallCollected) stars++;
+        return Math.min(stars, 3);
+    }
+
     nextLevel() {
+        this.stars = this.calculateStars();
+        this.totalStars += this.stars;
         this.currentLevel++;
         this.shotsUsed = 0;
-        this.dragonBallCollected = false; // Reset dragon ball for new level
+        this.dragonBallCollected = false;
+        this.activePowerUps = [];
         document.getElementById('levelDisplay').textContent = this.currentLevel + 1;
     }
 
@@ -109,22 +378,48 @@ class GameState {
         this.shotsUsed = 0;
         this.superSaiyajin = false;
         this.dragonBallCollected = false;
+        this.stars = 0;
+        this.activePowerUps = [];
         document.getElementById('scoreDisplay').textContent = this.score;
         document.getElementById('levelDisplay').textContent = this.currentLevel + 1;
+    }
+
+    addPowerUp(type) {
+        this.activePowerUps.push({
+            type: type,
+            duration: 300 // 5 seconds at 60fps
+        });
+    }
+
+    updatePowerUps() {
+        for (let i = this.activePowerUps.length - 1; i >= 0; i--) {
+            this.activePowerUps[i].duration--;
+            if (this.activePowerUps[i].duration <= 0) {
+                this.activePowerUps.splice(i, 1);
+            }
+        }
+    }
+
+    hasPowerUp(type) {
+        return this.activePowerUps.some(p => p.type === type);
     }
 }
 
 let canvas, ctx, gameState, soundManager, particleSystem;
 let goku = {};
-let levels, enemies, dragonBall;
+let levels, enemies, dragonBall, powerUps = [];
 let dragging = false;
 let dragStartX, dragStartY;
 let animationId;
+let camera = { x: 0, y: 0, shake: 0 };
+let wind = { strength: 0, direction: 1 };
 
 // Physics constants
-const normalGravity = 0.3;  // More realistic gravity (50% of super saiyajin)
-const superGravity = 0.15;  // Super Saiyajin gravity (saved from previous)
-const friction = 0.995;
+const normalGravity = 0.3;
+const superGravity = 0.15;
+const normalForce = 20;
+const superForce = 40;
+const friction = 0.99;
 const bounceReduction = 0.6;
 
 function startGame() {
@@ -142,32 +437,27 @@ function initGame() {
     soundManager = new SoundManager();
     particleSystem = new ParticleSystem();
 
+    soundManager.playMusic();
+
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        if (levels) defineLevels(); // Redefine levels on resize
+        if (levels) defineLevels();
     }
     resize();
     window.addEventListener('resize', resize);
 
-    // Load images with fallback
-    const gokuImg = new Image();
-    gokuImg.src = 'assets/goku.png';
-    gokuImg.onerror = () => console.log('Goku image not found, using fallback');
-
-    const enemyImg = new Image();
-    enemyImg.src = 'assets/freeza.png';
-    enemyImg.onerror = () => console.log('Enemy image not found, using fallback');
-
     function resetGoku() {
+        const baseSize = gameState.hasPowerUp('giant') ? 35 : 25;
         goku = {
             x: 100,
             y: canvas.height - 80,
-            radius: 25,
+            radius: baseSize,
             vx: 0,
             vy: 0,
             launched: false,
-            trail: []
+            trail: [],
+            piercing: gameState.hasPowerUp('pierce')
         };
     }
 
@@ -176,39 +466,55 @@ function initGame() {
         const h = canvas.height;
 
         levels = [
-            // Nível 1 - Fácil
-            [{ x: w - 150, y: h - 80, health: 1 }],
+            // Level 1 - Easy
+            [{ x: w - 150, y: h - 80, health: 1, type: 'normal' }],
 
-            // Nível 2 - Médio
+            // Level 2 - Medium
             [
-                { x: w - 200, y: h - 80, health: 1 },
-                { x: w - 120, y: h - 150, health: 1 }
+                { x: w - 200, y: h - 80, health: 1, type: 'normal' },
+                { x: w - 120, y: h - 150, health: 1, type: 'moving' }
             ],
 
-            // Nível 3 - Difícil
+            // Level 3 - Hard
             [
-                { x: w - 250, y: h - 80, health: 2 },
-                { x: w - 150, y: h - 120, health: 1 },
-                { x: w - 80, y: h - 180, health: 1 }
+                { x: w - 250, y: h - 80, health: 2, type: 'normal' },
+                { x: w - 150, y: h - 120, health: 1, type: 'shooter' },
+                { x: w - 80, y: h - 180, health: 1, type: 'moving' }
             ],
 
-            // Nível 4 - Muito Difícil
+            // Level 4 - Very Hard
             [
-                { x: w - 300, y: h - 80, health: 2 },
-                { x: w - 200, y: h - 140, health: 2 },
-                { x: w - 100, y: h - 200, health: 1 },
-                { x: w - 150, y: h - 260, health: 1 }
+                { x: w - 300, y: h - 80, health: 2, type: 'shooter' },
+                { x: w - 200, y: h - 140, health: 2, type: 'moving' },
+                { x: w - 100, y: h - 200, health: 1, type: 'normal' },
+                { x: w - 150, y: h - 260, health: 1, type: 'shooter' }
             ],
 
-            // Nível 5 - Extremo
+            // Level 5 - Boss Level
             [
-                { x: w - 350, y: h - 80, health: 3 },
-                { x: w - 250, y: h - 120, health: 2 },
-                { x: w - 150, y: h - 160, health: 2 },
-                { x: w - 80, y: h - 220, health: 1 },
-                { x: w - 200, y: h - 280, health: 1 }
+                { x: w - 200, y: h - 150, health: 5, type: 'boss' },
+                { x: w - 350, y: h - 80, health: 2, type: 'shooter' },
+                { x: w - 80, y: h - 220, health: 2, type: 'moving' }
             ]
         ];
+    }
+
+    function spawnPowerUps() {
+        powerUps = [];
+        if (Math.random() < 0.3) { // 30% chance
+            const types = ['speed', 'multishot', 'pierce', 'giant'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            powerUps.push(new PowerUp(
+                Math.random() * (canvas.width - 200) + 100,
+                Math.random() * (canvas.height - 200) + 100,
+                type
+            ));
+        }
+    }
+
+    function updateWind() {
+        wind.strength = (Math.random() - 0.5) * 0.1;
+        wind.direction = Math.random() > 0.5 ? 1 : -1;
     }
 
     function loadLevel() {
@@ -217,14 +523,9 @@ function initGame() {
             return;
         }
 
-        enemies = levels[gameState.currentLevel].map(e => ({
-            ...e,
-            maxHealth: e.health,
-            hit: false,
-            hitAnimation: 0
-        }));
+        enemies = levels[gameState.currentLevel].map(e => new Enemy(e.x, e.y, e.health, e.type));
 
-        // Initialize Dragon Ball for each level
+        // Dragon Ball
         dragonBall = {
             x: Math.random() * (canvas.width - 200) + 100,
             y: Math.random() * (canvas.height - 200) + 100,
@@ -233,6 +534,8 @@ function initGame() {
             pulse: 0
         };
 
+        spawnPowerUps();
+        updateWind();
         resetGoku();
         gameState.shotsUsed = 0;
     }
@@ -297,36 +600,46 @@ function initGame() {
         updatePowerMeter();
     }
 
+    function launchGoku() {
+        const deltaX = dragStartX - goku.x;
+        const deltaY = dragStartY - goku.y;
+        const distance = Math.hypot(deltaX, deltaY);
+
+        if (distance > 5) {
+            const currentForce = gameState.superSaiyajin ? superForce : normalForce;
+            const forceMultiplier = gameState.hasPowerUp('speed') ? 1.5 : 1;
+            const maxForce = currentForce * gameState.upgrades.force * forceMultiplier;
+
+            const force = Math.min(distance / 50, 2) * maxForce;
+            goku.vx = (deltaX / distance) * force;
+            goku.vy = (deltaY / distance) * force;
+
+            // Multi-shot power-up
+            if (gameState.hasPowerUp('multishot')) {
+                // Create additional Goku copies (visual effect)
+                for (let i = 0; i < 2; i++) {
+                    const angle = Math.atan2(deltaY, deltaX) + (i - 0.5) * 0.3;
+                    particleSystem.addExplosion(
+                        goku.x + Math.cos(angle) * 30,
+                        goku.y + Math.sin(angle) * 30,
+                        '#f8c927', 10
+                    );
+                }
+            }
+        }
+
+        goku.launched = true;
+        goku.trail = [];
+        gameState.shotsUsed++;
+
+        soundManager.play('launch');
+        particleSystem.addExplosion(goku.x, goku.y, '#f8c927');
+    }
+
     function onDragEnd(e) {
         e.preventDefault();
         if (dragging && !goku.launched) {
-            const deltaX = dragStartX - goku.x;
-            const deltaY = dragStartY - goku.y;
-            const distance = Math.hypot(deltaX, deltaY);
-
-            if (distance > 5) {
-                // Força muito maior para responsividade
-                // Use current physics for prediction
-                let maxForce, forceMultiplier;
-                if (gameState.superSaiyajin) {
-                    maxForce = 3;
-                    forceMultiplier = 40;
-                } else {
-                    maxForce = 2;
-                    forceMultiplier = 20;
-                }
-
-                const force = Math.min(distance / 50, maxForce) * forceMultiplier;
-                goku.vx = (deltaX / distance) * force;
-                goku.vy = (deltaY / distance) * force;
-            }
-
-            goku.launched = true;
-            goku.trail = [];
-            gameState.shotsUsed++;
-
-            soundManager.play('launch');
-            particleSystem.addExplosion(goku.x, goku.y, '#f8c927');
+            launchGoku();
         }
         dragging = false;
         updatePowerMeter();
@@ -334,13 +647,13 @@ function initGame() {
 
     function onMouseLeave(e) {
         if (dragging && !goku.launched) {
-            // Reset Goku position when mouse leaves canvas
             goku.x = dragStartX;
             goku.y = dragStartY;
             dragging = false;
             updatePowerMeter();
         }
     }
+
     // Event listeners
     canvas.addEventListener("mousedown", onDragStart);
     canvas.addEventListener("mousemove", onDragMove);
@@ -352,29 +665,67 @@ function initGame() {
     canvas.addEventListener("touchcancel", onDragEnd, { passive: false });
 
     function drawBackground() {
-        // Sky gradient
+        // Sky gradient with different themes
+        const themes = [
+            ['#87CEEB', '#98D8E8', '#90EE90'], // Earth
+            ['#4B0082', '#8A2BE2', '#9370DB'], // Space
+            ['#FF4500', '#FF6347', '#FFD700'], // Namek
+            ['#000000', '#1a1a1a', '#333333'], // Dark
+            ['#FF1493', '#FF69B4', '#FFB6C1']  // Majin
+        ];
+
+        const theme = themes[Math.min(gameState.currentLevel, themes.length - 1)];
         const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        gradient.addColorStop(0, '#87CEEB');
-        gradient.addColorStop(0.7, '#98D8E8');
-        gradient.addColorStop(1, '#90EE90');
+        gradient.addColorStop(0, theme[0]);
+        gradient.addColorStop(0.7, theme[1]);
+        gradient.addColorStop(1, theme[2]);
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Ground
-        ctx.fillStyle = '#8B4513';
+        ctx.fillStyle = gameState.currentLevel < 2 ? '#8B4513' : '#2F4F4F';
         ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
 
-        // Grass
-        ctx.fillStyle = '#228B22';
+        // Grass/Surface
+        ctx.fillStyle = gameState.currentLevel < 2 ? '#228B22' : '#696969';
         ctx.fillRect(0, canvas.height - 45, canvas.width, 5);
+
+        // Wind indicator
+        if (Math.abs(wind.strength) > 0.02) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Wind: ${wind.direction > 0 ? '→' : '←'} ${Math.abs(wind.strength * 100).toFixed(1)}`, 20, 100);
+        }
     }
 
     function drawGoku() {
+        // Camera shake effect
+        if (camera.shake > 0) {
+            ctx.save();
+            ctx.translate(
+                (Math.random() - 0.5) * camera.shake,
+                (Math.random() - 0.5) * camera.shake
+            );
+            camera.shake *= 0.9;
+        }
+
+        // Super Saiyajin aura
+        if (gameState.superSaiyajin) {
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#f8c927';
+            ctx.beginPath();
+            ctx.arc(goku.x, goku.y, goku.radius + 10 + Math.sin(Date.now() * 0.01) * 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
         // Trail effect
         if (goku.launched && goku.trail.length > 0) {
-            ctx.strokeStyle = '#f8c927';
-            ctx.lineWidth = 3;
+            const trailColor = gameState.superSaiyajin ? '#f8c927' : '#ff8c00';
+            ctx.strokeStyle = trailColor;
+            ctx.lineWidth = gameState.hasPowerUp('giant') ? 6 : 3;
             ctx.globalAlpha = 0.6;
             ctx.beginPath();
             ctx.moveTo(goku.trail[0].x, goku.trail[0].y);
@@ -385,8 +736,8 @@ function initGame() {
             ctx.globalAlpha = 1;
         }
 
-        // Goku body (fallback if image doesn't load)
-        ctx.fillStyle = '#ff8c00';
+        // Goku body
+        ctx.fillStyle = gameState.hasPowerUp('giant') ? '#FFD700' : '#ff8c00';
         ctx.beginPath();
         ctx.arc(goku.x, goku.y, goku.radius, 0, Math.PI * 2);
         ctx.fill();
@@ -398,80 +749,28 @@ function initGame() {
         ctx.fill();
 
         // Eyes
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = gameState.superSaiyajin ? '#00FFFF' : '#000';
         ctx.beginPath();
         ctx.arc(goku.x - 8, goku.y - 10, 3, 0, Math.PI * 2);
         ctx.arc(goku.x + 8, goku.y - 10, 3, 0, Math.PI * 2);
         ctx.fill();
 
         // Hair
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = gameState.superSaiyajin ? '#f8c927' : '#000';
         ctx.beginPath();
-        ctx.arc(goku.x - 10, goku.y - 15, 8, 0, Math.PI * 2);
-        ctx.arc(goku.x, goku.y - 20, 10, 0, Math.PI * 2);
-        ctx.arc(goku.x + 10, goku.y - 15, 8, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    function drawEnemy(enemy) {
-        if (enemy.hit) return;
-
-        // Hit animation
-        if (enemy.hitAnimation > 0) {
-            ctx.save();
-            ctx.translate(enemy.x, enemy.y);
-            ctx.rotate(Math.sin(enemy.hitAnimation * 0.5) * 0.2);
-            ctx.translate(-enemy.x, -enemy.y);
-            enemy.hitAnimation--;
+        if (gameState.superSaiyajin) {
+            // Spiky Super Saiyajin hair
+            ctx.arc(goku.x - 12, goku.y - 20, 10, 0, Math.PI * 2);
+            ctx.arc(goku.x, goku.y - 25, 12, 0, Math.PI * 2);
+            ctx.arc(goku.x + 12, goku.y - 20, 10, 0, Math.PI * 2);
+        } else {
+            ctx.arc(goku.x - 10, goku.y - 15, 8, 0, Math.PI * 2);
+            ctx.arc(goku.x, goku.y - 20, 10, 0, Math.PI * 2);
+            ctx.arc(goku.x + 10, goku.y - 15, 8, 0, Math.PI * 2);
         }
-
-        // Health-based color
-        const healthRatio = enemy.health / enemy.maxHealth;
-        let color = '#8B008B'; // Purple for full health
-        if (healthRatio < 0.7) color = '#FF4500'; // Orange for damaged
-        if (healthRatio < 0.4) color = '#FF0000'; // Red for critical
-
-        // Enemy body
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, 25, 0, Math.PI * 2);
         ctx.fill();
 
-        // Enemy face
-        ctx.fillStyle = '#E6E6FA';
-        ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, 20, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Eyes
-        ctx.fillStyle = '#FF0000';
-        ctx.beginPath();
-        ctx.arc(enemy.x - 8, enemy.y - 5, 4, 0, Math.PI * 2);
-        ctx.arc(enemy.x + 8, enemy.y - 5, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Health bar
-        if (enemy.maxHealth > 1) {
-            const barWidth = 40;
-            const barHeight = 6;
-            const barX = enemy.x - barWidth / 2;
-            const barY = enemy.y - 40;
-
-            // Background
-            ctx.fillStyle = '#333';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-
-            // Health
-            ctx.fillStyle = healthRatio > 0.5 ? '#00ff00' : healthRatio > 0.25 ? '#ffff00' : '#ff0000';
-            ctx.fillRect(barX, barY, barWidth * healthRatio, barHeight);
-
-            // Border
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
-        }
-
-        if (enemy.hitAnimation > 0) {
+        if (camera.shake > 0) {
             ctx.restore();
         }
     }
@@ -479,7 +778,6 @@ function initGame() {
     function drawDragonBall() {
         if (dragonBall.collected) return;
 
-        // Update animation
         dragonBall.rotation += 0.02;
         dragonBall.pulse += 0.1;
 
@@ -530,10 +828,9 @@ function initGame() {
             ctx.beginPath();
             ctx.moveTo(dragStartX, dragStartY);
 
-            // Predict trajectory
+            // Predict trajectory with wind
             let predX = dragStartX;
             let predY = dragStartY;
-
             const deltaX = dragStartX - goku.x;
             const deltaY = dragStartY - goku.y;
 
@@ -541,15 +838,16 @@ function initGame() {
             let predVy = 0;
 
             if (distance > 5) {
-                const force = Math.min(distance / 100, 2) * 20;
+                const currentForce = gameState.superSaiyajin ? superForce : normalForce;
+                const force = Math.min(distance / 50, 2) * currentForce;
                 predVx = (deltaX / distance) * force;
                 predVy = (deltaY / distance) * force;
             }
 
             for (let i = 0; i < 50; i++) {
                 const currentGravity = gameState.superSaiyajin ? superGravity : normalGravity;
-                const gravityMultiplier = gameState.superSaiyajin ? 0.4 : 0.8;
-                predVy += currentGravity * gravityMultiplier;
+                predVy += currentGravity * 0.6;
+                predVx += wind.strength * wind.direction; // Wind effect
                 predX += predVx;
                 predY += predVy;
 
@@ -568,11 +866,33 @@ function initGame() {
         }
     }
 
+    function drawUI() {
+        // Active power-ups display
+        let yOffset = 150;
+        gameState.activePowerUps.forEach(powerUp => {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, yOffset, 200, 30);
+
+            ctx.fillStyle = '#f8c927';
+            ctx.font = '14px Arial';
+            ctx.fillText(`${powerUp.type.toUpperCase()}: ${Math.ceil(powerUp.duration / 60)}s`, 15, yOffset + 20);
+            yOffset += 35;
+        });
+
+        // Stars display
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '20px Arial';
+        ctx.fillText(`★ ${gameState.totalStars}`, canvas.width - 100, 50);
+    }
+
     function update() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         drawBackground();
         drawAimLine();
+
+        // Update game state
+        gameState.updatePowerUps();
 
         // Update Goku
         if (goku.launched) {
@@ -585,9 +905,13 @@ function initGame() {
                 particleSystem.addTrail(goku.x, goku.y);
             }
 
-            // Physics
+            // Physics with wind
             const currentGravity = gameState.superSaiyajin ? superGravity : normalGravity;
-            goku.vy += currentGravity;
+            goku.vy += currentGravity * 0.6;
+            goku.vx += wind.strength * wind.direction;
+            goku.vx *= friction;
+            goku.vy *= friction;
+
             goku.x += goku.vx;
             goku.y += goku.vy;
 
@@ -597,10 +921,11 @@ function initGame() {
                 goku.vy *= -bounceReduction;
                 if (Math.abs(goku.vy) > 2) {
                     particleSystem.addExplosion(goku.x, goku.y, '#8B4513');
+                    camera.shake = 10;
                 }
             }
 
-            // Wall collisions
+            // Wall collisions with bouncing
             if (goku.x - goku.radius < 0) {
                 goku.x = goku.radius;
                 goku.vx *= -bounceReduction;
@@ -610,43 +935,57 @@ function initGame() {
                 goku.vx *= -bounceReduction;
             }
 
-            // Reset if stopped or out of bounds
-            const stopThreshold = gameState.superSaiyajin ? 0.5 : 1.0; // Normal mode stops easier
+            // Reset conditions
+            const stopThreshold = 1.0;
             if ((Math.abs(goku.vx) < stopThreshold && Math.abs(goku.vy) < stopThreshold && goku.y > canvas.height - 100) ||
                 goku.y > canvas.height + 100) {
                 resetGoku();
             }
         }
 
-        // Draw game objects
-        drawGoku();
-        drawDragonBall();
-
         // Update and draw enemies
         enemies.forEach((enemy) => {
+            enemy.update();
             if (!enemy.hit) {
-                drawEnemy(enemy);
+                enemy.draw(ctx);
 
                 // Collision detection
                 const dist = Math.hypot(goku.x - enemy.x, goku.y - enemy.y);
-                if (dist < goku.radius + 30 && goku.launched && Math.abs(goku.vx) > 0.5) {
+                const collisionRadius = goku.radius + (enemy.type === 'boss' ? 35 : 25);
+
+                if (dist < collisionRadius && goku.launched && Math.abs(goku.vx) > 0.5) {
                     enemy.health--;
                     enemy.hitAnimation = 20;
 
                     if (enemy.health <= 0) {
                         enemy.hit = true;
-                        gameState.addScore(100 * enemy.maxHealth);
-                        particleSystem.addExplosion(enemy.x, enemy.y, '#ff0000');
+                        const points = enemy.type === 'boss' ? 500 : 100 * enemy.maxHealth;
+                        gameState.addScore(points);
+                        particleSystem.addExplosion(enemy.x, enemy.y, '#ff0000', 25);
                         soundManager.play('impact');
+                        camera.shake = 15;
                     } else {
                         particleSystem.addExplosion(enemy.x, enemy.y, '#ffff00');
                     }
 
-                    // Bounce Goku away
-                    const angle = Math.atan2(goku.y - enemy.y, goku.x - enemy.x);
-                    goku.vx = Math.cos(angle) * 6;
-                    goku.vy = Math.sin(angle) * 6;
+                    // Bounce Goku away (unless piercing)
+                    if (!goku.piercing) {
+                        const angle = Math.atan2(goku.y - enemy.y, goku.x - enemy.x);
+                        goku.vx = Math.cos(angle) * 6;
+                        goku.vy = Math.sin(angle) * 6;
+                    }
                 }
+
+                // Check projectile collisions with Goku
+                enemy.projectiles.forEach((proj, i) => {
+                    const projDist = Math.hypot(goku.x - proj.x, goku.y - proj.y);
+                    if (projDist < goku.radius + proj.radius && goku.launched) {
+                        enemy.projectiles.splice(i, 1);
+                        // Damage or effect on Goku
+                        particleSystem.addExplosion(goku.x, goku.y, '#ff0000');
+                        camera.shake = 8;
+                    }
+                });
             }
         });
 
@@ -657,17 +996,43 @@ function initGame() {
                 dragonBall.collected = true;
                 gameState.dragonBallCollected = true;
                 gameState.superSaiyajin = true;
-                gameState.addScore(500); // Bonus points
+                gameState.addScore(500);
 
-                // Super Saiyajin transformation effect
-                for (let i = 0; i < 30; i++) {
-                    particleSystem.addExplosion(dragonBall.x, dragonBall.y, '#f8c927');
-                }
-
-                // Show transformation message (could add UI element here)
-                console.log('SUPER SAIYAJIN ACTIVATED!');
+                particleSystem.addTransformation(dragonBall.x, dragonBall.y);
+                soundManager.play('transformation');
+                camera.shake = 20;
             }
         }
+
+        // Power-up collisions
+        powerUps.forEach((powerUp) => {
+            if (!powerUp.collected && goku.launched) {
+                const dist = Math.hypot(goku.x - powerUp.x, goku.y - powerUp.y);
+                if (dist < goku.radius + powerUp.radius) {
+                    powerUp.collected = true;
+                    gameState.addPowerUp(powerUp.type);
+                    gameState.addScore(200);
+
+                    particleSystem.addExplosion(powerUp.x, powerUp.y, powerUp.effects[powerUp.type].color);
+                    soundManager.play('powerup');
+
+                    // Apply immediate effects
+                    if (powerUp.type === 'giant') {
+                        goku.radius = 35;
+                    }
+                }
+            }
+
+            if (!powerUp.collected) {
+                powerUp.update();
+                powerUp.draw(ctx);
+            }
+        });
+
+        // Draw game objects
+        drawGoku();
+        drawDragonBall();
+        drawUI();
 
         // Update particles
         particleSystem.update(ctx);
@@ -677,23 +1042,36 @@ function initGame() {
             setTimeout(() => showLevelComplete(), 1000);
         }
 
+        // Check lose condition (out of shots)
+        if (gameState.shotsUsed >= gameState.maxShots && !goku.launched && enemies.some(e => !e.hit)) {
+            setTimeout(() => showGameOver(), 1000);
+        }
+
         animationId = requestAnimationFrame(update);
     }
 
     function showLevelComplete() {
+        const stars = gameState.calculateStars();
         const bonus = Math.max(0, (gameState.maxShots - gameState.shotsUsed) * 50);
         gameState.addScore(bonus);
 
         document.getElementById('levelScore').textContent = gameState.score;
+        document.getElementById('starsEarned').textContent = '★'.repeat(stars);
         document.getElementById('levelComplete').style.display = 'flex';
 
         cancelAnimationFrame(animationId);
     }
 
+    function showGameOver() {
+        document.getElementById('gameOverScore').textContent = gameState.score;
+        document.getElementById('gameOver').style.display = 'flex';
+        cancelAnimationFrame(animationId);
+    }
+
     function showGameComplete() {
         document.getElementById('finalScore').textContent = gameState.score;
+        document.getElementById('finalStars').textContent = gameState.totalStars;
         document.getElementById('gameComplete').style.display = 'flex';
-
         cancelAnimationFrame(animationId);
     }
 
@@ -716,8 +1094,24 @@ function initGame() {
 
     window.restartGame = function() {
         document.getElementById('gameComplete').style.display = 'none';
+        document.getElementById('gameOver').style.display = 'none';
         gameState.reset();
         loadLevel();
         update();
+    };
+
+    window.toggleSound = function() {
+        soundManager.sfxEnabled = !soundManager.sfxEnabled;
+        document.getElementById('soundToggle').textContent = soundManager.sfxEnabled ? '🔊' : '🔇';
+    };
+
+    window.toggleMusic = function() {
+        soundManager.musicEnabled = !soundManager.musicEnabled;
+        if (soundManager.musicEnabled) {
+            soundManager.playMusic();
+        } else {
+            soundManager.stopMusic();
+        }
+        document.getElementById('musicToggle').textContent = soundManager.musicEnabled ? '🎵' : '🎵';
     };
 }

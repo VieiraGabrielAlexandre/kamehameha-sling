@@ -26,6 +26,7 @@
     <div class="hud">
         <div class="level-info">
             <span>Nível: <span id="levelDisplay">1</span></span>
+            <span>★ <span id="totalStars">0</span></span>
         </div>
         <div class="score-info">
             <span>Pontos: <span id="scoreDisplay">0</span></span>
@@ -36,6 +37,10 @@
                 <div id="powerFill" class="power-fill"></div>
             </div>
         </div>
+        <div class="controls">
+            <button id="soundToggle" onclick="toggleSound()">🔊</button>
+            <button id="musicToggle" onclick="toggleMusic()">🎵</button>
+        </div>
     </div>
     <button id="resetButton" onclick="resetLevel()">Reiniciar Nível</button>
 </div>
@@ -45,8 +50,19 @@
 <div id="levelComplete" class="modal" style="display:none;">
     <div class="modal-content">
         <h2>Nível Completo!</h2>
+        <div class="stars-display">
+            <span id="starsEarned">★★★</span>
+        </div>
         <p>Pontuação: <span id="levelScore">0</span></p>
         <button onclick="nextLevel()">Próximo Nível</button>
+    </div>
+</div>
+
+<div id="gameOver" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2>Game Over!</h2>
+        <p>Pontuação: <span id="gameOverScore">0</span></p>
+        <button onclick="restartGame()">Tentar Novamente</button>
     </div>
 </div>
 
@@ -55,6 +71,7 @@
         <h2>Parabéns!</h2>
         <p>Você completou todos os níveis!</p>
         <p>Pontuação Final: <span id="finalScore">0</span></p>
+        <p>Estrelas Totais: <span id="finalStars">0</span> ★</p>
         <button onclick="restartGame()">Jogar Novamente</button>
     </div>
 </div>
