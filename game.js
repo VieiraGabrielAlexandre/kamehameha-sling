@@ -763,6 +763,30 @@ class GameState {
     }
 }
 
+function updateUI() {
+    document.getElementById('levelDisplay').textContent = gameState.level;
+    document.getElementById('scoreDisplay').textContent = gameState.score;
+    document.getElementById('totalStars').textContent = gameState.totalStars;
+
+    // Atualizar display de aliados
+    const alliesList = document.getElementById('alliesList');
+    if (gameState.allies.length === 0) {
+        alliesList.textContent = 'Nenhum';
+        alliesList.style.color = '#ccc';
+    } else {
+        const allyNames = gameState.allies.map(ally => {
+            switch(ally.type) {
+                case 'vegeta': return 'Vegeta';
+                case 'trunks': return 'Trunks';
+                case 'gohan': return 'Gohan';
+                default: return ally.type;
+            }
+        });
+        alliesList.textContent = allyNames.join(', ');
+        alliesList.style.color = '#f8c927';
+    }
+}
+
 let canvas, ctx, gameState, soundManager, particleSystem;
 let goku = {};
 let levels, enemies, dragonBall, powerUps = [], allies = [];

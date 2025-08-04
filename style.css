@@ -143,6 +143,17 @@ canvas {
     text-shadow: 0 0 5px rgba(248, 201, 39, 0.5);
 }
 
+#alliesDisplay {
+    font-size: 1em;
+    color: #ccc;
+    margin-top: 5px;
+}
+
+#alliesList {
+    color: #f8c927;
+    font-weight: bold;
+}
+
 .power-meter {
     display: flex;
     align-items: center;
